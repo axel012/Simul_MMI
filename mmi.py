@@ -1,14 +1,22 @@
 import random
 import math
 import time
+from collections import deque
 
+#seed for RNG
 seed = time.time()
 random.seed(seed)
 print("Using seed %d"%(seed))
 debug = False
 
 class Event:
-    "Event class"
+    """
+    Event class to handle different event types
+        An Event is defined with 3 params:
+            name: the event name used as identifier.
+            rate: the event rate ex: 1/5->1 event per 5 time unit
+            handler: the function handler for that event.
+    """
     def __init__(self,name,rate,handler):
         self.name = name
         self.rate = rate
@@ -16,28 +24,46 @@ class Event:
         self.nextOcurrenceTime = 0
         self.disabled = False
     def disable(self):
+        """
+        Disable event ocurrence
+        """
         self.disabled = True
     def callHandler(self,param):
         self.handler(self,param)
     def enable(self):
         self.disabled = False
     def reset(self):
+        """
+        Resets event ocurrence time and disable it
+        """
         self.disable()
         self.nextOcurrenceTime = 0
-    def getNextOcurrenceTime(self,reloj):
+    def getNextOcurrenceTime(self,clock):
+        """
+        Calculates event ocurrence based on exponential distribution formula and rate
+            Params
+                clock: simulation clock time
+        """
         self.enable()
-        self.nextOcurrenceTime = (-self.rate * math.log(random.random())) + reloj
+        self.nextOcurrenceTime = (-self.rate * math.log(random.random())) + clock
         return self.nextOcurrenceTime
 
 class Arribo(Event):
-    "Arribal event"
+    """
+    Custom event type Arribo
+    """
     def __init__(self,name,rate,handler):
         Event.__init__(self,name,rate,handler)
     def callHandler(self,param):
         self.handler(param)
 
 class Partida(Event):
-    "Leave event"
+    """
+    Custom event type Partida
+        Params
+            (name,rate,handler) Event params
+            serverID: The server id that will handle this event
+    """
     def __init__(self,name,rate,handler,serverID):
         Event.__init__(self,name,rate,handler)
         self.serverID = serverID
@@ -46,15 +72,16 @@ class Partida(Event):
 
 
 
-class ServerStats:
-    "Contains server's statics counters"
+class Server:
+    """
+    Each Server contains its own statics counters
+        qt: acumulado area Q(t)
+        cccd: cantidad clientes completaron su demora
+        sd: acumulado demora promedio
+        ts: acumulado tiempo de servicio
+        bt: acumulado utilizacion del servidor
+    """
     def __init__(self):
-         #----CONTADORES ESTADISTICOS-------
-        #qt: acumulado area Q(t)
-        #cccd: cantidad clientes completaron su demora
-        #sd: acumulado demora promedio
-        #ts: acumulado tiempo de servicio
-        #bt: acumulado utilizacion del servidor
         self.qt = 0
         self.cccd = 0
         self.sd = 0
@@ -74,8 +101,8 @@ class MMI:
         self.nServidores = nServidores
     def initialization(self,eventos):
         self._servers = []
-        for i in range(self.nServidores):
-            self._servers.append(ServerStats())
+        for _ in range(self.nServidores):
+            self._servers.append(Server())
         self.reloj = 0
         self.relojA = self.reloj #estado anterior del reloj
         #reseteamos los eventos a su estado inicial (nextOcurrenceTime = 0, disabled = True)
@@ -87,11 +114,19 @@ class MMI:
         for e in eventos:
             e.getNextOcurrenceTime(self.reloj)       
     def registerEvent(self,event):
+        """
+        Add new event to events list, should be called at program start only
+            Params
+                Event: a custom Event defined above [ex: Arribo].
+        """
         self._events[event.name] = event
         return event
     def generateNextEvent(self,name):
         return (self._events[name]).getNextOcurrenceTime(self.reloj) 
     def getNextEvent(self):
+        """
+        Returns event with less ocurrence time from events list
+        """
         minE = 999999
         nextEvent = None
         for eventName in self._events:
@@ -103,12 +138,17 @@ class MMI:
                 nextEvent = event
         return nextEvent
     def relojNextEvent(self):
+        """
+        Forward clock time to next event time, and call event handler function
+        """
         proximoEvento = self.getNextEvent()
         self.relojA = self.reloj
         self.reloj += proximoEvento.nextOcurrenceTime - self.relojA
         proximoEvento.callHandler(self)
     def findFreeServer(self):
-        "return random free server or that with less queue"
+        """
+        Return random free server or the one with less queue
+        """
         _min = 9999999
         server = None
         sid = 0
@@ -128,6 +168,9 @@ class MMI:
     def getServerById(self,sid):
         return self._servers[sid]
     def reporte(self):
+        """
+        Return array of tuples of all servers statical counters
+        """
         ret = []
         for i in range(self.nServidores):
             server = self._servers[i]
@@ -149,7 +192,9 @@ class MMI:
 
 #funcion manejadora del evento arribo
 def farribo(self):  
-
+    """
+    Function handler for Custom Event Arrribo
+    """
     (server,sid) = self.findFreeServer()
     self.generateNextEvent("arribo")
     if(server.servidorOcupado == False):
@@ -167,6 +212,9 @@ def farribo(self):
 
 #funcion manejadora del evento partida
 def fpartida(self,serverID):
+    """
+    Function handler for Custom Event Partida
+    """
     server = self.getServerById(serverID)
     if(server.longCola == 0):
             #si no hay clientes no puede existir una partida como proximo evento
